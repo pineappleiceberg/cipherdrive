@@ -1,0 +1,26 @@
+[Unit]
+Description=cipherdrive encrypted USB
+After=network.target
+Documentation=https://github.com/pineappleiceberg/cipherdrive
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/usb_gadget_setup.sh
+ExecStop=/bin/bash -c 'echo "" > /sys/kernel/config/usb_gadget/cipherdrive/UDC && fusermount -u /mnt/cipherdrive_decrypted'
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+
+# Security hardening
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/lib/cipherdrive /mnt/cipherdrive_encrypted /mnt/cipherdrive_decrypted /sys/kernel/config/usb_gadget
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target 
