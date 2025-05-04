@@ -64,12 +64,12 @@ static int pread_fn(void *h, void *buf,
     fseeko(img, ((off+i)/PLAIN)*SECT, SEEK_SET);
     if (fread(t,1,SECT,img)!=SECT) return -1;
     if (!xcrypt(t,(off+i)/PLAIN,0)) {
-		memset(p+i, 0, PLAIN);             /* give host zeros      */
+		memset(p+i, 0, PLAIN);             //if our auth tag fails, we can return all zeros without failing
 		fprintf(logf,
 			"AUTH-FAIL blk=%llu  ➜ zero-filled sector returned\n",
 			(unsigned long long)((off+i)/PLAIN));
 	} else {
-		memcpy(p+i, t, PLAIN);             /* normal good sector   */
+		memcpy(p+i, t, PLAIN);             //sector with passing auth tag
 	}
   }
   return 0;
