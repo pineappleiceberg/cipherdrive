@@ -8,15 +8,15 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#define PLAIN 512
-#define TAG   16
-#define SECT  (PLAIN + TAG)
+#define PLAIN 512 //512 byte block size
+#define TAG   16 // tag for poly1305
+#define SECT  (PLAIN + TAG) //528 bytes stored for 512 bytes of data
 
-/* globals ----------------------------------------------------------- */
+
 static unsigned char key[crypto_aead_chacha20poly1305_IETF_KEYBYTES];
 static FILE *img, *logf;
 
-/* ------------------------------------------------------------------- */
+//last variable is if we are encrypting or decrypting
 static int xcrypt(void *buf, uint64_t blk, int enc)
 {
   unsigned char nonce[12] = {0}; //chacha needs a 12 byte nonce
@@ -43,7 +43,10 @@ static void *open_fn(int ro)
   img  = fopen("/srv/piusb.img", "r+b"); //backing file, can be on NVMe
   return img;
 }
-static void close_fn(void *h){ fclose(img); fclose(logf); }
+static void close_fn(void *h){
+    fclose(img);
+    fclose(logf);
+}
 
 static int64_t get_size(void *h)
 {
@@ -54,13 +57,20 @@ static int64_t get_size(void *h)
 static int pread_fn(void *h, void *buf,
                     uint32_t cnt, uint64_t off, uint32_t f)
 {
-  (void) f;  uint8_t *p = buf;  log_rw("R", off, cnt);
+  (void) f;  uint8_t *p = buf;
+  log_rw("R", off, cnt);
   for (uint32_t i=0; i<cnt; i+=PLAIN) {
     unsigned char t[SECT];
     fseeko(img, ((off+i)/PLAIN)*SECT, SEEK_SET);
     if (fread(t,1,SECT,img)!=SECT) return -1;
-    if (!xcrypt(t,(off+i)/PLAIN,0)) return -1;
-    memcpy(p+i,t,PLAIN);
+    if (!xcrypt(t,(off+i)/PLAIN,0)) {
+		memset(p+i, 0, PLAIN);             /* give host zeros      */
+		fprintf(logf,
+			"AUTH-FAIL blk=%llu  ➜ zero-filled sector returned\n",
+			(unsigned long long)((off+i)/PLAIN));
+	} else {
+		memcpy(p+i, t, PLAIN);             /* normal good sector   */
+	}
   }
   return 0;
 }
@@ -93,15 +103,15 @@ static int config(const char *k,const char *v)
   if (strcmp(k,"key") == 0) {
     char *pw = NULL;
     if (nbdkit_read_password(v,&pw)==-1) return -1;
-	
+
     if (hex2bin(pw,key,sizeof key)!=32){
       nbdkit_error("key must be 64-hex-chars (32 bytes)");
       free(pw); return -1;
     }
-    
-	free(pw); return 0;
+
+    free(pw); return 0;
   }
-  
+
   nbdkit_error("unknown parameter %s",k);
   return -1;
 }
@@ -116,3 +126,4 @@ static struct nbdkit_plugin plugin = {
   .pread       = pread_fn, .pwrite = pwrite_fn,
 };
 NBDKIT_REGISTER_PLUGIN(plugin)
+///usr/local/src/nbd_aead_logfile.c
